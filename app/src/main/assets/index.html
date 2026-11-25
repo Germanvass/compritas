@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#234aa8">
+<title>Caja de insumos</title>
+<style>
+  /* Layout: una columna. Registrar arriba; abajo el reporte en un recuadro de 3 columnas (Fecha, Depósitos, Insumos comprados) con totales y saldo final al pie. */
+  :root {
+    --bg: #f2f5f3;
+    --surface: #ffffff;
+    --ink: #14231d;
+    --muted: #55655d;
+    --line: #c9d5ce;
+    --accent: #234aa8;
+    --accent-ink: #ffffff;
+    --pos: #14794a;
+    --neg: #b3261e;
+    --pos-bg: #e3f3ea;
+    --neg-bg: #fbe8e6;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-num: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Roboto Mono", monospace;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.4;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 20px 14px 56px; display: flex; flex-direction: column; gap: 24px; }
+  h1 { font-size: 1.5rem; line-height: 1.15; margin: 0; font-weight: 700; }
+  h2 { font-size: 1.1rem; margin: 0; font-weight: 700; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  [hidden] { display: none !important; }
+  .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .banner { border: 1px solid var(--neg); background: var(--neg-bg); border-radius: 8px; padding: 10px 12px; }
+
+  form { display: flex; flex-direction: column; gap: 14px; }
+  .row2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 520px) { .row2 { grid-template-columns: 1fr 1fr; align-items: end; } }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  label, legend { font-size: 0.875rem; font-weight: 600; color: var(--muted); padding: 0; }
+  input[type="text"], input[type="date"] {
+    width: 100%; min-height: 48px; padding: 8px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  }
+  input.big { font-family: var(--font-num); font-size: 1.4rem; }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  fieldset.seg { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
+  fieldset.seg input { position: absolute; opacity: 0; pointer-events: none; }
+  fieldset.seg label {
+    display: flex; align-items: center; justify-content: center; min-height: 48px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: 1rem; font-weight: 500; cursor: pointer;
+  }
+  fieldset.seg label[for="t-com"] { border-radius: 8px 0 0 8px; }
+  fieldset.seg label[for="t-dep"] { border-radius: 0 8px 8px 0; border-left: 0; }
+  fieldset.seg input:checked + label { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  fieldset.seg input:focus-visible + label { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  button {
+    font: inherit; font-weight: 700; min-height: 48px; padding: 8px 18px; border-radius: 8px;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--accent); }
+  button.danger { background: transparent; color: var(--neg); border-color: var(--neg); }
+  .msg { font-size: 0.9rem; color: var(--pos); }
+  .msg.err { color: var(--neg); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { min-height: 40px; padding: 6px 14px; font-weight: 600; font-size: 0.9rem; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .range { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .report { display: flex; flex-direction: column; gap: 12px; }
+
+  /* Recuadro del reporte */
+  .box { background: var(--surface); border: 2px solid var(--ink); border-radius: 4px; overflow: hidden; }
+  .box-head { padding: 10px 12px; border-bottom: 2px solid var(--ink); }
+  .box-head .t { font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
+  .box-head .r { color: var(--muted); font-size: 0.9rem; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid var(--line); padding: 8px 8px; vertical-align: top; text-align: left; }
+  thead th { background: var(--bg); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 2px solid var(--ink); }
+  col.c1 { width: 18%; } col.c2 { width: 28%; } col.c3 { width: 54%; }
+  td.date { font-weight: 600; font-size: 0.9rem; }
+  .cell-btn {
+    display: flex; justify-content: space-between; gap: 8px; width: 100%; min-height: 32px; padding: 3px 0;
+    background: transparent; color: var(--ink); border: 0; border-radius: 4px; font: inherit; font-weight: 400; text-align: left;
+  }
+  .cell-btn + .cell-btn { border-top: 1px dashed var(--line); }
+  .cell-btn .n { min-width: 0; overflow-wrap: anywhere; }
+  .cell-btn .a { font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.dep .cell-btn { justify-content: flex-end; color: var(--pos); }
+  td.com .cell-btn .a { color: var(--neg); }
+  tr.prev td { background: var(--bg); font-weight: 600; }
+  tfoot td { font-weight: 700; border-top: 2px solid var(--ink); }
+  tfoot .tot { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  tfoot td.dep { text-align: right; color: var(--pos); }
+  tfoot td.com { text-align: right; color: var(--neg); }
+  tr.final td { font-size: 1.15rem; }
+  tr.final.pos td { background: var(--pos-bg); color: var(--pos); }
+  tr.final.neg td { background: var(--neg-bg); color: var(--neg); }
+  tr.final td.v { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .box-note { padding: 8px 12px; font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); }
+  .hint { color: var(--muted); font-size: 0.85rem; }
+
+  /* Al imprimir o guardar en PDF solo sale el recuadro del reporte */
+  @media print {
+    @page { size: A4; margin: 14mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; padding: 0; }
+    main { padding: 0; max-width: none; gap: 0; }
+    header, #banner, .card, .chips, .range, #range-err, #btn-pdf, .pdf-hint, .hint, .report > h2 { display: none !important; }
+    .report { gap: 0; }
+    .box { border-color: #000; border-radius: 0; }
+    tr { break-inside: avoid; }
+  }
+  .empty { padding: 18px 12px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>Caja de insumos</h1></header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="card" aria-labelledby="h-reg">
+    <h2 id="h-reg">Registrar</h2>
+    <form id="f" novalidate>
+      <div class="row2">
+        <div class="field">
+          <label for="fecha">Fecha</label>
+          <input id="fecha" type="date">
+        </div>
+        <fieldset class="seg">
+          <legend class="sr">Tipo de movimiento</legend>
+          <input type="radio" name="tipo" id="t-com" value="com" checked>
+          <label for="t-com">Compra</label>
+          <input type="radio" name="tipo" id="t-dep" value="dep">
+          <label for="t-dep">Depósito</label>
+        </fieldset>
+      </div>
+      <div class="field">
+        <label for="monto">Monto (S/)</label>
+        <input id="monto" class="big" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
+      </div>
+      <div class="field" id="det-wrap">
+        <label for="detalle">Qué compraste</label>
+        <input id="detalle" type="text" list="sugs" autocomplete="off" maxlength="120" placeholder="Ej: pollo 20 kg">
+        <datalist id="sugs"></datalist>
+      </div>
+      <div class="actions">
+        <button type="submit" id="btn-save">Agregar</button>
+        <button type="button" class="danger" id="btn-del" hidden>Borrar</button>
+        <button type="button" class="ghost" id="btn-cancel" hidden>Cancelar</button>
+        <span id="msg" class="msg" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="report" aria-labelledby="h-rep">
+    <h2 id="h-rep">Reporte</h2>
+    <div class="chips" id="chips" role="group" aria-label="Periodos rápidos"></div>
+    <div class="range">
+      <div class="field"><label for="desde">Desde</label><input id="desde" type="date"></div>
+      <div class="field"><label for="hasta">Hasta</label><input id="hasta" type="date"></div>
+    </div>
+    <div id="range-err" class="msg err" role="alert"></div>
+    <div id="box" class="box"></div>
+    <div class="actions">
+      <button type="button" id="btn-pdf" hidden>Guardar reporte en PDF</button>
+    </div>
+    <div class="hint pdf-hint" id="pdf-hint" hidden>Se abre una ventana: elige «Guardar como PDF» y luego «Guardar». Después puedes enviarlo por WhatsApp.</div>
+    <div class="hint" id="hint">Toca un monto del reporte para corregirlo o borrarlo.</div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "caja-insumos-v1";
+  var DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
+  var $ = function (id) { return document.getElementById(id); };
+
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function iso(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function parseISO(s) { var p = s.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function addDays(s, n) { var d = parseISO(s); d.setDate(d.getDate() + n); return iso(d); }
+  function fmtShort(s) { var d = parseISO(s); return DIAS[d.getDay()] + " " + pad(d.getDate()) + "/" + pad(d.getMonth() + 1); }
+  function fmtFull(s) { var p = s.split("-"); return p[2] + "/" + p[1] + "/" + p[0]; }
+  function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s || ""); }
+  var TODAY = iso(new Date());
+
+  function cents(v) { return Math.round(Number(v) * 100); }
+  function fmt(c) { return (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(c) { return (c < 0 ? "-" : "") + "S/ " + fmt(c); }
+  function parseMonto(txt) {
+    var t = String(txt || "").replace(/s\/\.?/i, "").replace(/\s/g, "").replace(",", ".");
+    if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+    var n = Number(t);
+    if (!isFinite(n) || n <= 0 || n > 10000000) return null;
+    return Math.round(n * 100) / 100;
+  }
+
+  /* ---------- guardado en el celular ---------- */
+  var days = {};
+  var canStore = true;
+  function cleanItem(x) {
+    if (!x || typeof x !== "object") return null;
+    var m = Number(x.monto);
+    if (!isFinite(m) || m <= 0) return null;
+    return { id: String(x.id || ""), tipo: x.tipo === "dep" ? "dep" : "com", monto: Math.round(m * 100) / 100, detalle: String(x.detalle || "").slice(0, 120) };
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      var obj = JSON.parse(raw), out = {};
+      Object.keys(obj || {}).forEach(function (f) {
+        if (!isDate(f) || !Array.isArray(obj[f])) return;
+        var items = obj[f].map(cleanItem).filter(Boolean);
+        if (items.length) out[f] = items;
+      });
+      days = out;
+    } catch (e) { canStore = false; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(days)); return true; }
+    catch (e) { canStore = false; banner("No se pudo guardar en este dispositivo. Libera espacio y vuelve a intentar."); return false; }
+  }
+  function banner(t) { var b = $("banner"); b.textContent = t; b.hidden = !t; }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  var editing = null, pendingDel = false;
+  var range = { from: addDays(TODAY, -6), to: TODAY };
+
+  /* ---------- cálculo ---------- */
+  function compute(from, to) {
+    var prev = 0, dep = 0, com = 0, rows = [];
+    Object.keys(days).sort().forEach(function (f) {
+      var inRange = f >= from && f <= to;
+      days[f].forEach(function (it) {
+        var c = cents(it.monto);
+        if (f < from) prev += it.tipo === "dep" ? c : -c;
+        else if (inRange) { if (it.tipo === "dep") dep += c; else com += c; }
+      });
+      if (inRange) rows.push({ fecha: f, items: days[f] });
+    });
+    return { prev: prev, dep: dep, com: com, final: prev + dep - com, rows: rows };
+  }
+
+  /* ---------- dibujo ---------- */
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "class") el.className = attrs[k];
+      else if (k === "text") el.textContent = attrs[k];
+      else if (k.indexOf("on") === 0) el.addEventListener(k.slice(2), attrs[k]);
+      else el.setAttribute(k, attrs[k]);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c == null) continue;
+      el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    }
+    return el;
+  }
+  function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+
+  var PRESETS = [
+    { id: "semana", label: "Esta semana", get: function () { var dow = parseISO(TODAY).getDay(); return { from: addDays(TODAY, -((dow + 6) % 7)), to: TODAY }; } },
+    { id: "7", label: "Últimos 7 días", get: function () { return { from: addDays(TODAY, -6), to: TODAY }; } },
+    { id: "14", label: "Últimos 14 días", get: function () { return { from: addDays(TODAY, -13), to: TODAY }; } },
+    { id: "mes", label: "Este mes", get: function () { return { from: TODAY.slice(0, 8) + "01", to: TODAY }; } },
+    { id: "todo", label: "Todo", get: function () { var k = Object.keys(days).sort(); return { from: k.length ? k[0] : TODAY, to: TODAY }; } }
+  ];
+  function activePreset() {
+    for (var i = 0; i < PRESETS.length; i++) {
+      var p = PRESETS[i].get();
+      if (p.from === range.from && p.to === range.to) return PRESETS[i].id;
+    }
+    return null;
+  }
+  function drawChips() {
+    var box = $("chips"), act = activePreset();
+    clear(box);
+    PRESETS.forEach(function (p) {
+      box.appendChild(h("button", {
+        type: "button", class: "chip", text: p.label, "aria-pressed": act === p.id ? "true" : "false",
+        onclick: function () { range = p.get(); syncRange(); render(); }
+      }));
+    });
+  }
+  function syncRange() { $("desde").value = range.from; $("hasta").value = range.to; }
+
+  function drawBox() {
+    var box = $("box"), err = $("range-err");
+    clear(box);
+    $("btn-pdf").hidden = true; $("pdf-hint").hidden = true;
+    if (range.from > range.to) {
+      err.textContent = "La fecha «Desde» es posterior a «Hasta». Corrige el rango.";
+      $("hint").hidden = true;
+      return;
+    }
+    err.textContent = "";
+    var r = compute(range.from, range.to);
+    $("hint").hidden = !r.rows.length;
+
+    box.appendChild(h("div", { class: "box-head" },
+      h("div", { class: "t", text: "Reporte de insumos" }),
+      h("div", { class: "r", text: "Del " + fmtFull(range.from) + " al " + fmtFull(range.to) })
+    ));
+
+    if (!r.rows.length && r.prev === 0) {
+      box.appendChild(h("div", { class: "empty", text: "No hay movimientos en estas fechas. Registra el primero arriba o cambia el rango." }));
+      return;
+    }
+
+    var tbody = h("tbody");
+    if (r.prev !== 0) {
+      tbody.appendChild(h("tr", { class: "prev" },
+        h("td", { colspan: "2", text: "Saldo anterior" }),
+        h("td", { class: "num", text: money(r.prev), style: "text-align:right" })
+      ));
+    }
+    r.rows.forEach(function (row) {
+      var tdDep = h("td", { class: "dep" }), tdCom = h("td", { class: "com" });
+      row.items.forEach(function (it) {
+        if (it.tipo === "dep") {
+          tdDep.appendChild(h("button", { type: "button", class: "cell-btn", "aria-label": "Editar depósito de " + money(cents(it.monto)), onclick: function () { startEdit(row.fecha, it); } },
+            h("span", { class: "a", text: fmt(cents(it.monto)) })));
+        } else {
+          tdCom.appendChild(h("button", { type: "button", class: "cell-btn", "aria-label": "Editar compra " + it.detalle, onclick: function () { startEdit(row.fecha, it); } },
+            h("span", { class: "n", text: it.detalle }), h("span", { class: "a", text: fmt(cents(it.monto)) })));
+        }
+      });
+      tbody.appendChild(h("tr", null, h("td", { class: "date", text: fmtShort(row.fecha) }), tdDep, tdCom));
+    });
+
+    var fcls = r.final < 0 ? "neg" : (r.final > 0 ? "pos" : "");
+    var tfoot = h("tfoot", null,
+      h("tr", null,
+        h("td", { text: "Total" }),
+        h("td", { class: "dep tot", text: fmt(r.dep) }),
+        h("td", { class: "com tot", text: fmt(r.com) })
+      ),
+      h("tr", { class: "final " + fcls },
+        h("td", { colspan: "2", text: "SALDO FINAL" }),
+        h("td", { class: "v", text: money(r.final) })
+      )
+    );
+
+    box.appendChild(h("table", null,
+      h("colgroup", null, h("col", { class: "c1" }), h("col", { class: "c2" }), h("col", { class: "c3" })),
+      h("thead", null, h("tr", null, h("th", { text: "Fecha" }), h("th", { text: "Depósitos" }), h("th", { text: "Insumos comprados" }))),
+      tbody, tfoot
+    ));
+    if (r.final < 0) box.appendChild(h("div", { class: "box-note", text: "Saldo negativo: se gastó más de lo depositado." }));
+    $("btn-pdf").hidden = false; $("pdf-hint").hidden = false;
+  }
+
+  function savePdf() {
+    var name = "Reporte insumos " + range.from + " a " + range.to;
+    var old = document.title;
+    try {
+      if (window.AndroidApp && typeof window.AndroidApp.printReport === "function") {
+        window.AndroidApp.printReport(name);
+      } else {
+        document.title = name;
+        window.print();
+      }
+    } catch (e) {
+      setMsg("No se pudo abrir la ventana para guardar el PDF.", true);
+    }
+    document.title = old;
+  }
+
+  function drawSuggestions() {
+    var seen = {}, list = [];
+    Object.keys(days).sort().reverse().forEach(function (f) {
+      days[f].forEach(function (it) {
+        var k = it.detalle.toLowerCase();
+        if (it.tipo === "com" && it.detalle && !seen[k]) { seen[k] = 1; list.push(it.detalle); }
+      });
+    });
+    var dl = $("sugs"); clear(dl);
+    list.slice(0, 80).forEach(function (s) { dl.appendChild(h("option", { value: s })); });
+  }
+  function render() { drawChips(); drawBox(); drawSuggestions(); }
+
+  /* ---------- formulario ---------- */
+  function currentTipo() { return document.querySelector('input[name="tipo"]:checked').value; }
+  function syncTipo() { $("det-wrap").hidden = currentTipo() === "dep"; }
+  function setMsg(t, isErr) { var m = $("msg"); m.textContent = t; m.className = "msg" + (isErr ? " err" : ""); }
+
+  function startEdit(fecha, it) {
+    editing = { fecha: fecha, id: it.id }; pendingDel = false;
+    $("fecha").value = fecha;
+    $(it.tipo === "dep" ? "t-dep" : "t-com").checked = true;
+    syncTipo();
+    $("monto").value = it.monto.toFixed(2);
+    $("detalle").value = it.tipo === "com" ? it.detalle : "";
+    $("btn-save").textContent = "Guardar cambios";
+    $("btn-del").hidden = false; $("btn-del").textContent = "Borrar";
+    $("btn-cancel").hidden = false;
+    setMsg("Corrigiendo un movimiento.", false);
+    $("f").scrollIntoView({ block: "start" });
+  }
+  function stopEdit() {
+    editing = null; pendingDel = false;
+    $("btn-save").textContent = "Agregar";
+    $("btn-del").hidden = true; $("btn-cancel").hidden = true;
+    $("monto").value = ""; $("detalle").value = "";
+  }
+  function removeItem(fecha, id) {
+    var left = (days[fecha] || []).filter(function (x) { return x.id !== id; });
+    if (left.length) days[fecha] = left; else delete days[fecha];
+  }
+
+  $("btn-del").addEventListener("click", function () {
+    if (!editing) return;
+    if (!pendingDel) { pendingDel = true; $("btn-del").textContent = "¿Seguro? Toca otra vez"; return; }
+    removeItem(editing.fecha, editing.id);
+    save(); stopEdit(); setMsg("Movimiento borrado.", false); render();
+  });
+  $("btn-cancel").addEventListener("click", function () { stopEdit(); setMsg("", false); });
+
+  $("f").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var fecha = $("fecha").value;
+    if (!isDate(fecha)) return setMsg("Elige una fecha.", true);
+    var tipo = currentTipo();
+    var monto = parseMonto($("monto").value);
+    if (monto === null) return setMsg("Escribe un monto mayor que 0, por ejemplo 45.50.", true);
+    var detalle = $("detalle").value.trim().slice(0, 120);
+    if (tipo === "com" && !detalle) return setMsg("Escribe qué compraste.", true);
+    if (tipo === "dep") detalle = "Depósito";
+
+    var wasEditing = editing;
+    var item = { id: wasEditing ? wasEditing.id : uid(), tipo: tipo, monto: monto, detalle: detalle };
+    if (wasEditing) removeItem(wasEditing.fecha, wasEditing.id);
+    (days[fecha] = days[fecha] || []).push(item);
+    if (!save()) return;
+    var okMsg = wasEditing ? "Cambios guardados." : (tipo === "dep" ? "Depósito agregado: " : "Compra agregada: ") + money(cents(monto));
+    stopEdit(); setMsg(okMsg, false);
+    if (fecha < range.from) range.from = fecha;
+    if (fecha > range.to) range.to = fecha;
+    syncRange(); render();
+    $("monto").focus();
+  });
+
+  function onRange() {
+    var a = $("desde").value, b = $("hasta").value;
+    if (isDate(a) && isDate(b)) { range = { from: a, to: b }; render(); }
+  }
+  $("btn-pdf").addEventListener("click", savePdf);
+  $("desde").addEventListener("change", onRange);
+  $("hasta").addEventListener("change", onRange);
+  document.querySelectorAll('input[name="tipo"]').forEach(function (r) { r.addEventListener("change", syncTipo); });
+
+  load();
+  if (!canStore) banner("Este dispositivo no permite guardar datos. Lo que registres se perderá al cerrar la app.");
+  $("fecha").value = TODAY;
+  syncRange(); syncTipo(); render();
+})();
+</script>
+</body>
+</html>
