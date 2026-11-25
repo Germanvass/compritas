@@ -16,7 +16,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # El SDK de Android ya viene instalado en el equipo de GitHub.
+      # Solo se aceptan las licencias para que Gradle pueda descargar lo que falte.
+      - name: Aceptar licencias del SDK de Android
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - uses: gradle/actions/setup-gradle@v4
         with:
